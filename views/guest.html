@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="app-version" content="{{APP_VERSION}}">
+<title>{{EVENT_TITLE}}</title>
+<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="style.css">
+<script>try{navigator.serviceWorker&&navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(x){x.unregister()})})}catch(e){}</script>
+</head>
+<body>
+
+<!-- Shared balloon gradients (no layout, no external files) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <radialGradient id="bgGold" cx="35%" cy="28%" r="80%">
+      <stop offset="0" stop-color="#F8EBC6"/><stop offset=".4" stop-color="#D9B972"/>
+      <stop offset=".8" stop-color="#B8924A"/><stop offset="1" stop-color="#8F6F2E"/>
+    </radialGradient>
+    <radialGradient id="bgWhite" cx="35%" cy="28%" r="80%">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset=".55" stop-color="#F8F6EF"/>
+      <stop offset="1" stop-color="#DDD6C2"/>
+    </radialGradient>
+  </defs>
+</svg>
+
+<!-- Welcome / login -->
+<div id="screen-login" class="screen login active">
+  <div class="deco" aria-hidden="true">
+    <svg class="balloon b1" viewBox="0 0 60 112"><path d="M30 108c-5-9 5-17 0-28" fill="none" stroke="#B8A27A" stroke-width="1"/><path d="M30 4C48 4 56 20 56 36c0 22-16 34-26 38C20 70 4 58 4 36 4 20 12 4 30 4z" fill="url(#bgGold)"/><path d="M26 74l4 7 4-7z" fill="#8F6F2E"/><ellipse cx="19" cy="22" rx="6" ry="10" transform="rotate(-22 19 22)" fill="#fff" opacity=".5"/></svg>
+    <svg class="balloon b2" viewBox="0 0 60 112"><path d="M30 108c-5-9 5-17 0-28" fill="none" stroke="#C9BC9C" stroke-width="1"/><path d="M30 4C48 4 56 20 56 36c0 22-16 34-26 38C20 70 4 58 4 36 4 20 12 4 30 4z" fill="url(#bgWhite)" stroke="#D2C39A" stroke-width="1"/><path d="M26 74l4 7 4-7z" fill="#CFC4A6"/><ellipse cx="19" cy="22" rx="6" ry="10" transform="rotate(-22 19 22)" fill="#fff" opacity=".9"/></svg>
+    <svg class="balloon b3" viewBox="0 0 60 112"><path d="M30 108c-5-9 5-17 0-28" fill="none" stroke="#C9BC9C" stroke-width="1"/><path d="M30 4C48 4 56 20 56 36c0 22-16 34-26 38C20 70 4 58 4 36 4 20 12 4 30 4z" fill="url(#bgWhite)" stroke="#D2C39A" stroke-width="1"/><path d="M26 74l4 7 4-7z" fill="#CFC4A6"/><ellipse cx="19" cy="22" rx="6" ry="10" transform="rotate(-22 19 22)" fill="#fff" opacity=".9"/></svg>
+    <svg class="balloon b4" viewBox="0 0 60 112"><path d="M30 108c-5-9 5-17 0-28" fill="none" stroke="#B8A27A" stroke-width="1"/><path d="M30 4C48 4 56 20 56 36c0 22-16 34-26 38C20 70 4 58 4 36 4 20 12 4 30 4z" fill="url(#bgGold)"/><path d="M26 74l4 7 4-7z" fill="#8F6F2E"/><ellipse cx="19" cy="22" rx="6" ry="10" transform="rotate(-22 19 22)" fill="#fff" opacity=".5"/></svg>
+    <svg class="balloon b5" viewBox="0 0 60 112"><path d="M30 108c-5-9 5-17 0-28" fill="none" stroke="#C9BC9C" stroke-width="1"/><path d="M30 4C48 4 56 20 56 36c0 22-16 34-26 38C20 70 4 58 4 36 4 20 12 4 30 4z" fill="url(#bgWhite)" stroke="#D2C39A" stroke-width="1"/><path d="M26 74l4 7 4-7z" fill="#CFC4A6"/><ellipse cx="19" cy="22" rx="6" ry="10" transform="rotate(-22 19 22)" fill="#fff" opacity=".9"/></svg>
+  </div>
+
+  <div class="login-body">
+    {{EVENT_BADGE_HTML}}
+    <h1 class="title-cloud"><span class="t-main">{{TITLE_MAIN}}</span> <span class="t-sub">{{TITLE_SUB}}</span></h1>
+
+    <div class="welcome-text">
+      <p class="greet">Pozdravljen!</p>
+      <p>Imel boš <span id="limit-display">15</span> slik za cel večer.</p>
+      <p>Vsako sliko lahko na kratko opišeš. Lahko pa rešuješ tudi naloge, ki ti jih bomo ponudili. Za vsako rešeno nalogo dobiš eno sliko več.</p>
+      <p>Vse slike bodo v skupnem albumu za goste.</p>
+    </div>
+
+    <div class="form-group">
+      <input id="name-input" type="text" inputmode="text" autocomplete="name"
+             autocorrect="off" autocapitalize="words" placeholder="Ime in priimek" class="name-input">
+    </div>
+    <div id="name-error" class="error-msg" style="display:none"></div>
+    <button id="btn-login" class="btn-primary">Naprej</button>
+  </div>
+
+  <p class="login-foot">Ime si zapomnimo na tem telefonu, da ti ga ne bo treba ponovno vpisovati.</p>
+</div>
+
+<!-- Choose candidate -->
+<div id="screen-choose" class="screen">
+  <div class="card">
+    <h2>Kdo si?</h2>
+    <p>Našel/a sem te v sistemu. Izberi svoje ime:</p>
+    <div id="candidates-list"></div>
+    <button id="btn-new-person" class="btn-secondary">Nisem nobeden od teh, sem nov/a</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="screen-main" class="screen">
+  <div id="offline-note" class="pending-bar" style="display:none">Ni povezave. Poskušam znova. Tvoje slike so varno shranjene na telefonu.</div>
+  <div id="pending-bar" class="pending-bar" style="display:none">Slike se še pošiljajo. Ne zapri strani, počakaj, da se konča.</div>
+  <div class="top-bar">
+    <span id="greeting">Živjo!</span>
+    <span id="counter" class="counter"></span>
+  </div>
+
+  <input id="file-input" type="file" accept="image/*" capture="environment" hidden>
+
+  <!-- before the first photo -->
+  <div id="first-block" class="first-block" style="display:none">
+    <p class="first-line">Naredi tvojo prvo sliko</p>
+    <button id="btn-camera" class="btn-camera">📷 SLIKAJ</button>
+  </div>
+
+  <!-- after the first photo -->
+  <div id="after-first" style="display:none">
+    <div id="task-card" class="task-card">
+      <div class="task-label">Naloga</div>
+      <div id="task-text" class="task-text"></div>
+      <div id="task-bonus" class="task-bonus">+1 slika bonus</div>
+    </div>
+    <button id="btn-task-photo" class="btn-task-photo task-only">📷 Slikaj nalogo</button>
+    <button id="btn-next-task" class="btn-next-task task-only">Naslednja naloga</button>
+    <button id="btn-any-photo" class="btn-any-photo">📷 Slikaj karkoli</button>
+  </div>
+
+  <div id="upload-status" class="upload-status" style="display:none"><div id="upload-status-text"></div><div class="bar"><span id="upload-status-bar"></span></div></div>
+  <div id="pending-list"></div>
+
+  <div id="success-card" class="success-card" style="display:none">Slika poslana ✓</div>
+
+  <div id="finished-msg" class="finished-msg" style="display:none">
+    Porabil/a si vse slike. Hvala, da si del večera!<br>Slike boš videl/a jutri. 🎉
+  </div>
+
+  <div id="thumbs-section" style="display:none">
+    <h3 class="thumbs-heading">Moje slike:</h3>
+    <div id="thumb-strip" class="thumb-strip"></div>
+  </div>
+
+  <div class="footer">
+    <button id="btn-logout" class="btn-logout"></button>
+  </div>
+</div>
+
+<!-- Preview -->
+<div id="screen-preview" class="screen">
+  <img id="preview-img" class="preview-img" alt="">
+  <label for="caption-input" class="visually-hidden">Opis slike</label>
+  <textarea id="caption-input" class="caption-input" maxlength="140" rows="2" placeholder="Opiši sliko (ni obvezno)"></textarea>
+  <div id="preview-status" class="upload-status" style="display:none"></div>
+  <button id="btn-send" class="btn-primary">Pošlji</button>
+  <button id="btn-discard" class="btn-outline">Zavrži in poskusi znova</button>
+</div>
+
+<!-- Fullscreen viewer -->
+<div id="viewer" class="viewer" hidden>
+  <button id="viewer-close" class="viewer-close" aria-label="Zapri">✕</button>
+  <img id="viewer-img" alt="">
+  <div class="viewer-caption">
+    <div id="viewer-label"></div>
+    <div id="viewer-task" class="viewer-task"></div>
+  </div>
+</div>
+
+<script src="/lib/labels.js"></script>
+<script src="/lib/upload-core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

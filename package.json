@@ -1,0 +1,22 @@
+{
+  "name": "birthday-photo-app",
+  "version": "1.0.0",
+  "description": "Self-hosted party photo app: guests take photos in the browser, solve tasks for bonus photos, and share an album with hearts.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/names.test.js && node tests/labels.test.js && node tests/db.test.js && node tests/ratelimit.test.js && node tests/smoke.test.js && node tests/album.test.js && node tests/security.test.js && node tests/tasks.test.js && node tests/access.test.js && node tests/gallery.test.js && node tests/upload-core.test.js && node tests/upload-server.test.js && node tests/resume.test.js && node tests/audit.test.js && node tests/quota.test.js && node tests/bonus.test.js && node tests/hearts.test.js"
+  },
+  "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/lora": "^5.3.0",
+    "archiver": "^7.0.1",
+    "better-sqlite3": "^9.6.0",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.35.5"
+  }
+}

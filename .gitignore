@@ -1,0 +1,11 @@
+# secrets and event data: never commit these
+.env
+data/
+data-backup-*/
+*.log
+
+node_modules/
+qr.png
+printable/
+.vscode/
+.DS_Store

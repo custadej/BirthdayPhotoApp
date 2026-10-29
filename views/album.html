@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{EVENT_TITLE}}</title>
+<link rel="stylesheet" href="/fonts/fonts.css"><link rel="stylesheet" href="/style.css">
+<script>try{navigator.serviceWorker&&navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(x){x.unregister()})})}catch(e){}</script>
+</head>
+<body class="album-body">
+<div class="album-wrap">
+  <a id="back" href="/" class="back-link" hidden>Nazaj</a>
+  <header class="album-head">
+    <h1>{{EVENT_TITLE}}</h1>
+    <div class="album-sub">Spomini večera <span id="count"></span></div>
+  </header>
+
+  <div class="album-tools">
+    <select id="filter" aria-label="Filter po gostu"><option value="">Vsi gosti</option></select>
+    <select id="sort" aria-label="Razvrsti">
+      <option value="new">Najnovejše</option>
+      <option value="old">Najstarejše</option>
+      <option value="hearts">Najbolj všečne</option>
+    </select>
+    {{ZIP_BUTTON}}
+  </div>
+
+  <div id="grid" class="album-grid"></div>
+  <p id="empty" class="note" style="text-align:center" hidden>Še ni slik.</p>
+</div>
+
+<div id="lightbox" class="lightbox" hidden>
+  <button class="close" id="lb-close" aria-label="Zapri">✕</button>
+  <button class="nav prev" id="lb-prev" aria-label="Prejšnja">‹</button>
+  <div class="lb-photo">
+    <img id="lb-img" alt="">
+    <div class="lb-heart" id="lb-heart-wrap">
+      <button id="lb-heart" type="button" aria-label="Všečkaj"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span id="lb-heart-count" class="hcount">Všečkaj</span></button>
+    </div>
+  </div>
+  <div class="cap"><div id="lb-label"></div><div id="lb-task" class="task"></div><div id="lb-own" class="hint" hidden>Svoje slike ne moreš všečkati</div></div>
+  <a id="lb-dl" class="btn btn-primary dl" style="text-align:center;text-decoration:none">Prenesi sliko z opisom</a>
+  <div id="lb-hint" class="hint" hidden>Nato tapni Shrani sliko</div>
+  <button class="nav next" id="lb-next" aria-label="Naslednja">›</button>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+try { if (localStorage.getItem('guest_session')) $('back').hidden = false; } catch {}
+let all = [];      // every photo (the server sends newest first)
+let shown = [];    // after guest filter + sort: the order of the grid and of prev/next
+let idx = -1;
+
+// ── Hearts state ──────────────────────────────────────────────────────────────
+let counts = {};          // photoId -> hearts
+let mine = new Set();     // photoIds this voter has hearted
+let meGuest = null;       // guest id when the voter is a logged-in guest (cannot heart own photos)
+const inFlight = new Set();
+const badges = new Map(); // photoId -> badge element on its grid card
+
+function guestToken() {
+  try { const s = JSON.parse(localStorage.getItem('guest_session')); return (s && s.token) || null; } catch { return null; }
+}
+function apiHeaders(json) {
+  const h = {};
+  if (json) h['Content-Type'] = 'application/json';
+  const t = guestToken();
+  if (t) h['X-Guest-Token'] = t;
+  return h;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function heartIcon(size) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', size);
+  svg.setAttribute('height', size);
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z');
+  svg.append(path);
+  return svg;
+}
+
+// ── Sort / filter ─────────────────────────────────────────────────────────────
+const SORTS = ['new', 'old', 'hearts'];
+let sortMode = 'new';
+try { const s = sessionStorage.getItem('album_sort'); if (SORTS.includes(s)) sortMode = s; } catch {}
+
+const newer = (a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+function sortPhotos(list) {
+  const out = [...list];
+  if (sortMode === 'old') out.sort((a, b) => -newer(a, b));
+  else if (sortMode === 'hearts') out.sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0) || newer(a, b));
+  else out.sort(newer);
+  return out;
+}
+
+function applyView() {
+  const g = $('filter').value;
+  shown = sortPhotos(g ? all.filter(p => p.guestId === g) : all);
+  render();
+}
+
+function countText(n) {
+  // 1 slika, 2 sliki, 3-4 slike, else slik
+  const w = n % 100 === 1 ? 'slika' : n % 100 === 2 ? 'sliki' : (n % 100 === 3 || n % 100 === 4) ? 'slike' : 'slik';
+  return `· ${n} ${w}`;
+}
+
+function render() {
+  const grid = $('grid');
+  grid.replaceChildren();
+  badges.clear();
+  shown.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'album-card';
+    const wrap = document.createElement('div');
+    wrap.className = 'imgwrap';
+    const img = document.createElement('img');
+    img.src = `/album/medium/${p.id}`;
+    img.loading = 'lazy';
+    img.alt = p.label;
+    const badge = document.createElement('span');
+    badge.className = 'card-heart';
+    const num = document.createElement('span');
+    badge.append(heartIcon(22), num);
+    wrap.append(img, badge);
+    badges.set(p.id, badge);
+    const cap = document.createElement('div');
+    cap.className = 'cap';
+    cap.textContent = p.label;
+    if (p.task) {
+      const t = document.createElement('div');
+      t.className = 'task';
+      t.textContent = p.task;
+      cap.append(t);
+    }
+    card.append(wrap, cap);
+    card.addEventListener('click', () => openLightbox(i));
+    grid.append(card);
+  });
+  $('count').textContent = countText(shown.length);
+  $('empty').hidden = shown.length > 0;
+  updateHearts();
+}
+
+// Display only: counts on grid cards, the lightbox button, the top-3 card.
+function updateHearts() {
+  for (const [id, badge] of badges) {
+    const n = counts[id] || 0;
+    badge.hidden = n === 0;
+    badge.lastChild.textContent = String(n);
+  }
+  if (!$('lightbox').hidden && shown[idx]) paintLightboxHeart(shown[idx]);
+}
+
+// "1 všeček", "2 všečka", "3 všečki", "5 všečkov"
+function likesText(n) {
+  const m = n % 100;
+  const w = m === 1 ? 'všeček' : m === 2 ? 'všečka' : (m === 3 || m === 4) ? 'všečki' : 'všečkov';
+  return `${n} ${w}`;
+}
+
+function paintLightboxHeart(p) {
+  const n = counts[p.id] || 0;
+  const own = !!meGuest && p.guestId === meGuest;
+  $('lb-heart-count').textContent = n > 0 ? likesText(n) : 'Všečkaj';
+  $('lb-heart').classList.toggle('hearted', mine.has(p.id));
+  $('lb-heart').disabled = own;
+  $('lb-heart').setAttribute('aria-pressed', mine.has(p.id) ? 'true' : 'false');
+  $('lb-own').hidden = !own;
+}
+
+async function refreshHearts() {
+  try {
+    const r = await fetch('/album/api/hearts', { headers: apiHeaders(false), cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    counts = d.counts || {};
+    mine = new Set(d.mine || []);
+    meGuest = d.me || null;
+    updateHearts();
+  } catch {}
+}
+
+// Optimistic toggle with rollback; the server answers with the real count.
+async function toggleHeart(p) {
+  if (inFlight.has(p.id) || (meGuest && p.guestId === meGuest)) return;
+  inFlight.add(p.id);
+  const wasMine = mine.has(p.id), wasCount = counts[p.id] || 0;
+  if (wasMine) { mine.delete(p.id); counts[p.id] = Math.max(0, wasCount - 1); }
+  else { mine.add(p.id); counts[p.id] = wasCount + 1; }
+  updateHearts();
+  try {
+    const r = await fetch('/album/api/heart', { method: 'POST', headers: apiHeaders(true), body: JSON.stringify({ photoId: p.id }) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    counts[p.id] = d.count;
+    if (d.hearted) mine.add(p.id); else mine.delete(p.id);
+  } catch {
+    if (wasMine) mine.add(p.id); else mine.delete(p.id);   // roll back
+    counts[p.id] = wasCount;
+  } finally {
+    inFlight.delete(p.id);
+    updateHearts();
+    refreshHearts();
+  }
+}
+
+// the heart must not trigger the swipe handler of the lightbox
+for (const type of ['touchstart', 'touchend', 'click']) {
+  $('lb-heart-wrap').addEventListener(type, e => e.stopPropagation(), { passive: true });
+}
+$('lb-heart').addEventListener('click', () => { if (shown[idx]) toggleHeart(shown[idx]); });
+
+function openLightbox(i) {
+  if (!shown.length) return;
+  idx = (i + shown.length) % shown.length;
+  const p = shown[idx];
+  $('lb-img').src = `/album/photo/${p.id}`;
+  $('lb-label').textContent = p.label;
+  $('lb-task').textContent = p.task || '';
+  $('lb-dl').href = `/album/card/${p.id}.jpg?dl=1`;
+  $('lightbox').hidden = false;
+  paintLightboxHeart(p);
+  prefetchCard(p);
+  const n = shown[(idx + 1) % shown.length];
+  if (n) new Image().src = `/album/photo/${n.id}`;
+}
+function closeLightbox() { $('lightbox').hidden = true; $('lb-img').removeAttribute('src'); dropCard(); }
+
+// ── Save to gallery on phones: share the caption card as a file ──────────────
+// Browsers cannot write to the gallery directly; the share sheet is the best available method.
+const UA = navigator.userAgent || '';
+const IPADOS = navigator.maxTouchPoints > 1 && navigator.platform === 'MacIntel';
+const IS_IOS = /iPhone|iPad|iPod/.test(UA) || IPADOS;
+const IS_PHONE = /iPhone|iPad|iPod|Android/.test(UA) || IPADOS;
+$('lb-hint').hidden = !IS_IOS;
+
+// Only the current photo's card is kept in memory, so the tap can call share() at once
+// (Safari drops the user gesture if the card is fetched after the tap).
+let cardFor = null, cardFile = null, cardPromise = null;
+function dropCard() { cardFor = null; cardFile = null; cardPromise = null; }
+function prefetchCard(p) {
+  dropCard();
+  if (!IS_PHONE) return;
+  const id = p.id;
+  cardFor = id;
+  cardPromise = fetch(`/album/card/${id}.jpg`)
+    .then(r => (r.ok ? r.blob() : Promise.reject(new Error('card'))))
+    .then(b => {
+      const f = new File([b], `photo-${id}.jpg`, { type: 'image/jpeg' });
+      if (cardFor === id) cardFile = f;
+      return f;
+    })
+    .catch(() => null);
+}
+
+function downloadFile(file) {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+$('lb-dl').addEventListener('click', async e => {
+  if (!IS_PHONE) return;               // desktop: the normal download link
+  e.preventDefault();
+  const btn = $('lb-dl');
+  const p = shown[idx];
+  if (!p) return;
+  let file = cardFor === p.id ? cardFile : null;
+  if (!file) {
+    const text = btn.textContent;
+    btn.textContent = 'Pripravljam…';
+    file = cardFor === p.id ? await cardPromise : null;
+    btn.textContent = text;
+  }
+  if (!file) { location.href = `/album/card/${p.id}.jpg?dl=1`; return; }
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;   // sheet closed by the guest: stay silent
+    // NotAllowedError or anything else: fall back to a normal download
+  }
+  downloadFile(file);
+});
+
+$('lb-close').onclick = closeLightbox;
+$('lb-prev').onclick = () => openLightbox(idx - 1);
+$('lb-next').onclick = () => openLightbox(idx + 1);
+document.addEventListener('keydown', e => {
+  if ($('lightbox').hidden) return;
+  if (e.key === 'ArrowLeft') openLightbox(idx - 1);
+  else if (e.key === 'ArrowRight') openLightbox(idx + 1);
+  else if (e.key === 'Escape') closeLightbox();
+});
+let sx = null;
+$('lightbox').addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, { passive: true });
+$('lightbox').addEventListener('touchend', e => {
+  if (sx === null) return;
+  const dx = e.changedTouches[0].clientX - sx;
+  sx = null;
+  if (Math.abs(dx) > 50) openLightbox(idx + (dx < 0 ? 1 : -1));
+});
+
+$('filter').onchange = applyView;
+$('sort').value = sortMode;
+$('sort').onchange = () => {
+  sortMode = $('sort').value;
+  try { sessionStorage.setItem('album_sort', sortMode); } catch {}
+  applyView();
+};
+if ($('zip-all')) $('zip-all').onclick = () => { location.href = '/album/zip'; };
+
+(async () => {
+  const [resp] = await Promise.all([fetch('/api/album/photos'), refreshHearts()]);
+  if (!resp.ok) { location.reload(); return; }
+  const data = await resp.json();
+  all = data.photos;
+  const withPhotos = new Set(all.map(p => p.guestId));
+  for (const g of data.guests.filter(g => withPhotos.has(g.id))) {
+    const o = document.createElement('option');
+    o.value = g.id;
+    o.textContent = g.name;
+    $('filter').append(o);
+  }
+  applyView();
+  setInterval(() => { if (!document.hidden) refreshHearts(); }, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshHearts(); });
+})();
+</script>
+</body>
+</html>
